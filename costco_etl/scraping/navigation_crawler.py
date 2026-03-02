@@ -1,4 +1,5 @@
 import requests
+from costco_etl.observability.run_context import RunContext
 
 BASE_URL = "https://search.costco.com/api/apps/www_costco_com/query/www_costco_com_navigation"
 
@@ -38,7 +39,14 @@ def _build_params(category_url: str, start: int) -> dict:
         "chdheader": "true",
     }
 
-def crawl_category(api_key: str, category_url: str, category_count: int) -> list:
+def crawl_category(
+    api_key: str,
+    category_url: str,
+    category_count: int,    
+    ctx: RunContext,
+    demo: bool = False,
+    max_demo_pages: int = 3,
+) -> list:
 
     headers = _build_headers(api_key)
     all_docs = []
@@ -55,13 +63,38 @@ def crawl_category(api_key: str, category_url: str, category_count: int) -> list
     docs = response_block.get("docs", [])
     num_found = response_block.get("numFound", 0)
 
+    total_pages = (num_found // 24) + (1 if num_found % 24 else 0)
+    current_page = 1
+
     if not docs:
         return []
 
     all_docs.extend(docs)
 
+    ctx.event(
+        "crawl_page_fetched",
+        stage="scrape_catalog",
+        category=category_url,
+        page=current_page,
+        total_pages=total_pages
+    )
+
     # ---- Pagination ----
     for start in range(24, num_found, 24):
+        current_page += 1
+
+        # 🔥 DEMO LIMIT CONTROL
+        if demo and current_page > max_demo_pages:
+            ctx.event(
+                "demo_pagination_stopped",
+                stage="scrape_catalog",
+                category=category_url,
+                stopped_at_page=current_page - 1,
+                total_available_pages=total_pages,
+                max_demo_pages=max_demo_pages
+            )
+
+            break
 
         params = _build_params(category_url, start=start)
 
@@ -75,6 +108,14 @@ def crawl_category(api_key: str, category_url: str, category_count: int) -> list
             break
 
         all_docs.extend(page_docs)
+
+        ctx.event(
+            "crawl_page_fetched",
+            stage="scrape_catalog",
+            category=category_url,
+            page=current_page,
+            total_pages=total_pages
+        )
 
     # ---- Integrity check (importante) ----
     return all_docs

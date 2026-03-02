@@ -45,3 +45,8 @@ def persist_product_categories(db_path: str, products_flat: list[dict]) -> None:
 
     finally:
         conn.close()
+
+    return {
+        "relations_inserted": len(rows),
+        "unique_categories_linked": len({r[1] for r in rows})
+    }
