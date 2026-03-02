@@ -72,6 +72,7 @@ def get_products_by_category(category_url: str = Query(..., min_length=1)) -> di
                 JOIN product_categories pc
                   ON pc.product_id = p.id
                 WHERE pc.category_url = ?
+                ORDER BY p.review_count DESC
                 """,
                 (category_url,),
             ).fetchall()
