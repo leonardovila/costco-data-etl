@@ -3,7 +3,8 @@ import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from costco_etl.storage.paths import DB_PATH
-
+from typing import Any
+from fastapi import Query
 
 def get_connection():
     conn = sqlite3.connect(str(DB_PATH), timeout=30)
@@ -40,6 +41,47 @@ def get_category_tree():
             return {
                 "category_tree": json.loads(row["payload"]),
                 "updated_at": row["updated_at"]
+            }
+
+        finally:
+            conn.close()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/by-category")
+def get_products_by_category(category_url: str = Query(..., min_length=1)) -> dict[str, Any]:
+    """
+    Returns ALL products linked to the given category_url via product_categories.
+    category_url must match exactly what's stored (e.g. '/floral-arrangements.html').
+    """
+    try:
+        conn = get_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    p.id,
+                    p.name,
+                    p.min_price,
+                    p.max_price,
+                    p.rating,
+                    p.image_url,
+                    p.review_count
+                FROM products p
+                JOIN product_categories pc
+                  ON pc.product_id = p.id
+                WHERE pc.category_url = ?
+                """,
+                (category_url,),
+            ).fetchall()
+
+            products = [dict(r) for r in rows]
+
+            return {
+                "category_url": category_url,
+                "count": len(products),
+                "products": products,
             }
 
         finally:
