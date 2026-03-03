@@ -90,3 +90,40 @@ def get_products_by_category(category_url: str = Query(..., min_length=1)) -> di
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/categories/metrics")
+def get_category_metrics(category_url: str = Query(..., min_length=1)) -> dict[str, Any]:
+    """
+    Returns aggregated metrics for a given category_url from categories table.
+    """
+
+    try:
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                """
+                SELECT
+                    url,
+                    name,
+                    level,
+                    product_count,
+                    total_reviews,
+                    avg_rating,
+                    avg_min_price,
+                    sale_count
+                FROM categories
+                WHERE url = ?
+                """,
+                (category_url,),
+            ).fetchone()
+
+            if not row:
+                raise HTTPException(status_code=404, detail="Category not found")
+
+            return dict(row)
+
+        finally:
+            conn.close()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
